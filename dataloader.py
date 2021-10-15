@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
-value_scale = 255
+value_scale = 1
 mean = [0.485, 0.456, 0.406]
 mean = [item * value_scale for item in mean]
 std = [0.229, 0.224, 0.225]
@@ -21,12 +21,13 @@ camvid_transform_train = data_transform.Compose([
     data_transform.RandomGaussianBlur(),
     data_transform.RandomHorizontalFlip(),
     data_transform.Crop([512, 512], crop_type='rand', padding=mean, ignore_label=255),
-    data_transform.ToTensor(),
-    data_transform.Normalize(mean=mean, std=std)])
+    data_transform.ToTensor()])
+    # data_transform.Normalize(mean=mean, std=std)])
+
 camvid_transform_test = data_transform.Compose([
     data_transform.Crop([512, 512], crop_type='center', padding=mean, ignore_label=255),
-    data_transform.ToTensor(),
-    data_transform.Normalize(mean=mean, std=std)])
+    data_transform.ToTensor()])
+    # data_transform.Normalize(mean=mean, std=std)])
 
 
 def is_image_file(filename):
@@ -82,7 +83,7 @@ class SemData(Dataset):
         image_path, label_path = self.data_list[index]
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)  # BGR 3 channel ndarray wiht shape H * W * 3
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # convert cv2 read image from BGR order to RGB order
-        image = np.float32(image)
+        image = np.float32(image) / 255.
         label = np.load(label_path)
 
         if image.shape[0] != label.shape[0] or image.shape[1] != label.shape[1]:

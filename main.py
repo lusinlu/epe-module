@@ -13,6 +13,7 @@ from dataloader import dataset_camvid
 from model import SRDModel
 from utils import AverageMeter, intersectionAndUnionGPU
 import numpy as np
+
 torch.manual_seed(0)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -31,7 +32,7 @@ parser.add_argument("--lr", type=float, default=1e-3,
 parser.add_argument("--weights", default="",
                     help="Path to weights (to continue training).")
 parser.add_argument("--cuda", action="store_true", help="Enables cuda")
-parser.add_argument("--psize", type=int, default=16,
+parser.add_argument("--psize", type=int, default=32,
                     help="patch size for variance calculations")
 
 parser.add_argument("--classes", type=int, default=32,
@@ -54,7 +55,7 @@ if torch.cuda.is_available() and not args.cuda:
 
 train_dataloader, val_dataloader = dataset_camvid(batch_size=args.batch_size, data_path=args.data_path)
 
-device = torch.device("cuda:0" if args.cuda else "cpu")
+device = torch.device("cuda:1" if args.cuda else "cpu")
 
 model = SRDModel(patch_size=args.psize, image_width=args.image_size, image_height=args.image_size, num_classes=args.classes).to(device)
 print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
@@ -63,6 +64,7 @@ if args.weights:
     model.load_state_dict(torch.load(args.weights, map_location=device))
 
 criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label).to(device)
+criterion_mse = nn.MSELoss().to(device)
 
 optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ 220 ], gamma=0.1)
@@ -77,12 +79,12 @@ for epoch in range(args.epochs):
         optimizer.zero_grad()
 
         inputs, target = inputs.to(device), target.to(device)
-        output = model(inputs)
+        output, feature, rgb = model(inputs)
 
-        loss =  criterion(output, target)
-
+        loss_ce =  criterion(output, target)
+        loss_mse = criterion_mse(rgb, inputs)
+        loss =  loss_ce + 0.5*loss_mse
         loss.backward()
-        # nn.utils.clip_grad_norm(model.parameters(),args.clip)
 
         optimizer.step()
 
@@ -95,8 +97,13 @@ for epoch in range(args.epochs):
     summary.add_scalar('Loss/train', loss.detach().cpu().numpy(), epoch)
     mask = torch.repeat_interleave(torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1).unsqueeze(1),3, dim=1)
 
-    summary.add_images('output',mask * 50 , epoch)
-    summary.add_images('target', torch.repeat_interleave(target.unsqueeze(1),3, dim=1) * 50, epoch)
+
+
+    summary.add_images('output',(mask * 50)[:2] , epoch)
+    summary.add_images('target', torch.repeat_interleave(target.unsqueeze(1),3, dim=1)[:2] * 50, epoch)
+    summary.add_images('feature',(feature)[:2] , epoch)
+    summary.add_images('rgb',(rgb)[:2] , epoch)
+
 
     # Test
     model.eval()
@@ -109,7 +116,7 @@ for epoch in range(args.epochs):
         for iteration, (inputs, target) in progress_bar:
             inputs, target = inputs.to(device), target.to(device)
 
-            prediction = model(inputs)
+            prediction, _ , _= model(inputs)
             loss = criterion(prediction, target)
             loss = torch.mean(loss)
             progress_bar.set_description(f"Epoch: {epoch + 1} [{iteration + 1}/{len(val_dataloader)}] "
