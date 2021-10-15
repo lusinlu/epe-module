@@ -7,4 +7,4 @@ entropy guided feature extraction for real time semantic segmentation
 | EntropyFeat         | 46.96%    |  
 
 # Architecture
-<img src="https://github.com/lusinlu/skipnet_evaluation/blob/main/figures/architecture.png" width="300" height="300">
+<img src="https://github.com/lusinlu/real_time_segmentation/blob/main/architecture.png" width="1000" height="500">
