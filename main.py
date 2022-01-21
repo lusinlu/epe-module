@@ -10,7 +10,7 @@ import torch.utils.data.distributed
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from dataloader import dataset_camvid
-from model import SRDModel
+from model_eff import SRDModel
 from utils import AverageMeter, intersectionAndUnionGPU
 import numpy as np
 
@@ -55,9 +55,9 @@ if torch.cuda.is_available() and not args.cuda:
 
 train_dataloader, val_dataloader = dataset_camvid(batch_size=args.batch_size, data_path=args.data_path)
 
-device = torch.device("cuda:1" if args.cuda else "cpu")
+device = torch.device("cuda:0" if args.cuda else "cpu")
 
-model = SRDModel(patch_size=args.psize, image_width=args.image_size, image_height=args.image_size, num_classes=args.classes).to(device)
+model = SRDModel(patch_size=args.psize, image_width=576, image_height=768, num_classes=args.classes).to(device)
 print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
 # model = nn.DataParallel(model)
 if args.weights:

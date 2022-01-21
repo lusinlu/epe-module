@@ -3,6 +3,8 @@ from typing import  Tuple
 from torch import nn, Tensor
 from torch.nn.utils import  spectral_norm
 import torch.nn.functional as F
+from efficentnet import EfficientNet
+
 
 class Entropy(nn.Sequential):
     def __init__(self, patch_size, image_width, image_height, cuda):
@@ -199,40 +201,30 @@ class SRDModel(nn.Sequential):
         self.dec_lf2 = Conv_Bn_Relu(in_features=32, out_features=64, kernel_size=3, stride=1, padding=1 )
         self.dec_lf3 = Conv_Bn_Relu(in_features=64, out_features=3, kernel_size=3, stride=1, padding=1 )
 
-        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1 )
+        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=24, kernel_size=3, stride=1, padding=1 )
 
 
         # define encoder module
-        self.head_depthwise = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=5, stride=4, padding=2, groups=3)
-
-        self.head_separable = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=1)
-        self.enc_block1 = ResBlock(n_feats=32, kernel_size=3, stride=2)
-        self.enc_conv1 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=1)
-
-        self.enc_block2 = ResBlock(n_feats=64, kernel_size=3, stride=2)
-        self.enc_conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=1)
-
-        self.enc_block3 = ResBlock(n_feats=128, kernel_size=3, stride=2)
-        self.enc_conv3 = Conv_Bn_Relu(in_features=128, out_features=256, kernel_size=1, padding=0, stride=1)
+        self.encoder = EfficientNet.from_pretrained('efficientnet-b1')
 
         # num_patches = 0
         # define decoder module
-        self.dec_head = Conv_Bn_Relu(in_features=256, out_features=128, kernel_size=3, stride=1, padding=1,
-                                     group=256 )
-        self.dec_block1 = Upsample2x(in_features=128)
-        self.dec_conv1 = Conv_Bn_Relu(in_features=128, out_features=64, kernel_size=3, stride=1, padding=1, group=128)
 
-        self.dec_block2 = Upsample2x(in_features=64)
-        self.dec_conv2 = Conv_Bn_Relu(in_features=64, out_features=32, kernel_size=3, stride=1, padding=1, group=64)
+        self.dec_block1 = Upsample2x(in_features=112)
+        self.dec_conv1 = Conv_Bn_Relu(in_features=112, out_features=40, kernel_size=3, stride=1, padding=1)
 
-        self.dec_block3 = Upsample2x(in_features=32 )
+        self.dec_block2 = Upsample2x(in_features=40)
+        self.dec_conv2 = Conv_Bn_Relu(in_features=40, out_features=24, kernel_size=3, stride=1, padding=1)
 
-        self.dec_conv3 = Conv_Bn_Relu(in_features=64, out_features= 16 * num_classes, kernel_size=3, stride=1, padding=1 )
+        self.dec_block3 = Upsample2x(in_features=24 )
 
-        self.tail = nn.PixelShuffle(4)
-        self.avg_pool = nn.AvgPool2d(kernel_size=4, stride=4)
+        self.dec_conv3 = Conv_Bn_Relu(in_features=48, out_features= 16 * num_classes, kernel_size=3, stride=1, padding=1 )
 
-        self.common_bn = nn.BatchNorm2d(num_features=64)
+        self.tail = nn.PixelShuffle(2)
+
+        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
+
+        self.common_bn = nn.BatchNorm2d(num_features=48)
 
     def patch_to_image(self, image_patches,  indices, num_channels=3) -> Tensor:
         b_size = image_patches.shape[0]
@@ -260,22 +252,13 @@ class SRDModel(nn.Sequential):
 
 
         local_descriptors_ext1 = self.dec_lf_ext(local_descriptors)
+        # ##################################
 
-        enc_head = self.head_depthwise(input)
-        enc_head = self.head_separable(enc_head) # 32
+        endpoints = self.encoder.extract_endpoints(input)
+        enc3, enc2, enc1, enc0 =  endpoints['reduction_4'], endpoints['reduction_3'], endpoints['reduction_2'], endpoints['reduction_1']
 
-        enc1 = self.enc_block1(enc_head) #32
-        enc1_out = self.enc_conv1(enc1) #64
 
-        enc2 = self.enc_block2(enc1_out) #64
-        enc2_out = self.enc_conv2(enc2) # 128
-
-        enc3 = self.enc_block3(enc2_out) #128
-        enc3_out = self.enc_conv3(enc3) #256
-
-        dec_head = self.dec_head(enc3_out) # 128
-
-        dec1 = self.dec_block1(dec_head) #128
+        dec1 = self.dec_block1(enc3) #128
         dec1 = self.dec_conv1(dec1) #64
         dec_add1 = torch.add(dec1, enc2) #128
 
@@ -285,7 +268,8 @@ class SRDModel(nn.Sequential):
         dec_add2 = torch.add(dec2, enc1) #64
 
         dec3 = self.dec_block3(dec_add2) #32
-
+        # print(dec3.shape, local_descriptors_ext1.shape)
+        # exit()
         feature_fuse = self.common_bn(torch.cat((dec3, self.avg_pool(local_descriptors_ext1)), dim=1))
 
         dec3 = self.dec_conv3(feature_fuse) #16

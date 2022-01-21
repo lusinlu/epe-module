@@ -20,12 +20,12 @@ camvid_transform_train = data_transform.Compose([
     data_transform.RandRotate([-10, 10], padding=mean, ignore_label=255),
     data_transform.RandomGaussianBlur(),
     data_transform.RandomHorizontalFlip(),
-    data_transform.Crop([512, 512], crop_type='rand', padding=mean, ignore_label=255),
+    data_transform.Resize((768, 576)),
     data_transform.ToTensor()])
     # data_transform.Normalize(mean=mean, std=std)])
 
 camvid_transform_test = data_transform.Compose([
-    data_transform.Crop([512, 512], crop_type='center', padding=mean, ignore_label=255),
+    data_transform.Resize((768, 576)),
     data_transform.ToTensor()])
     # data_transform.Normalize(mean=mean, std=std)])
 
