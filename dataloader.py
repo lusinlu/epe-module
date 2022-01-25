@@ -6,7 +6,7 @@ import os.path
 import cv2
 from torch.utils.data import Dataset
 import torchvision
-
+from cityscapes import Cityscapes
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
 value_scale = 1
@@ -31,11 +31,11 @@ cityscape_transform_train = data_transform.Compose([
     data_transform.RandRotate([-10, 10], padding=mean, ignore_label=255),
     data_transform.RandomGaussianBlur(),
     data_transform.RandomHorizontalFlip(),
-    data_transform.Resize((1024, 512)),
+    data_transform.Resize((512, 1024)),
     data_transform.ToTensor()])
 
 cityscape_transform_test = data_transform.Compose([
-    data_transform.Resize((1024, 512)),
+    data_transform.Resize((512, 1024)),
     data_transform.ToTensor()])
 
 
@@ -118,11 +118,11 @@ def dataset_camvid(batch_size, data_path):
 
 def dataset_Cityscapes(root, batch_size):
 
-    train_dataset = torchvision.datasets.Cityscapes(root, split='train', mode='fine',
+    train_dataset = Cityscapes(root, split='train', mode='fine',
                          target_type='semantic', transforms=cityscape_transform_train)
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
-    val_dataset = torchvision.datasets.Cityscapes(root, split='val', mode='coarse',
+    val_dataset = Cityscapes(root, split='val', mode='fine',
                          target_type='semantic', transforms=cityscape_transform_test)
     val_loader = data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2)
 

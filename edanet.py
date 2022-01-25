@@ -110,8 +110,8 @@ class EDANet(nn.Module):
 
         self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
         self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
-        self.common_bn = nn.BatchNorm2d(num_features=64)
-        self.final = Conv_Bn_Relu(in_features=64, out_features= num_classes, kernel_size=3, stride=1, padding=1 )
+        self.common_bn = nn.BatchNorm2d(num_features=num_classes + 32)
+        self.final = Conv_Bn_Relu(in_features=num_classes + 32, out_features= num_classes, kernel_size=3, stride=1, padding=1 )
 
         self.layers = nn.ModuleList()
         self.dilation1 = [1, 1, 1, 2, 2]

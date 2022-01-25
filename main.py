@@ -24,9 +24,9 @@ parser.add_argument("--data_path", type=str,
                     help="Path to datasets")
 parser.add_argument("--epochs", default=300, type=int, metavar="N",
                     help="Number of total epochs to run. (default:100)")
-parser.add_argument("--img_width", type=int, default=576,
+parser.add_argument("--img_width", type=int, default=1024,
                     help="Width of the image")
-parser.add_argument("--img_height", type=int, default=768,
+parser.add_argument("--img_height", type=int, default=512,
                     help="Height of the image")
 parser.add_argument("-b", "--batch-size", default=2, type=int,
                     metavar="N", help="mini-batch size (default: 64).")
@@ -73,7 +73,8 @@ print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
 if args.weights:
     model.load_state_dict(torch.load(args.weights, map_location=device))
 
-criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label)
+criterion = nn.CrossEntropyLoss(ignore_index=255)
+
 criterion_mse = nn.MSELoss()
 
 optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
