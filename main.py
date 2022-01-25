@@ -9,28 +9,33 @@ import torch.utils.data
 import torch.utils.data.distributed
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from dataloader import dataset_camvid
+from dataloader import dataset_camvid, dataset_Cityscapes
 from model_eff import SRDModel
+from edanet import EDANet
 from utils import AverageMeter, intersectionAndUnionGPU, iou
 import numpy as np
 
 torch.manual_seed(0)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-
+# camvid img_width", type=int, default=576, img_height", type=int, default=768
 parser = argparse.ArgumentParser(description="EFSR training with the GradientVariance loss")
 parser.add_argument("--data_path", type=str,
                     help="Path to datasets")
 parser.add_argument("--epochs", default=300, type=int, metavar="N",
                     help="Number of total epochs to run. (default:100)")
-parser.add_argument("--image-size", type=int, default=512,
-                    help="Size of the data crop (squared assumed). (default:256)")
+parser.add_argument("--img_width", type=int, default=576,
+                    help="Width of the image")
+parser.add_argument("--img_height", type=int, default=768,
+                    help="Height of the image")
 parser.add_argument("-b", "--batch-size", default=2, type=int,
                     metavar="N", help="mini-batch size (default: 64).")
 parser.add_argument("--lr", type=float, default=1e-4,
                     help="Learning rate. (default:0.01)")
 parser.add_argument("--weights", default="",
                     help="Path to weights (to continue training).")
+parser.add_argument("--dataset", default="cityscapes",
+                    help="Dataset - cityscapes or camvid.")
 parser.add_argument("--cuda", action="store_true", help="Enables cuda")
 parser.add_argument("--psize", type=int, default=32,
                     help="patch size for variance calculations")
@@ -52,12 +57,16 @@ except OSError:
 
 if torch.cuda.is_available() and not args.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
-
-train_dataloader, val_dataloader = dataset_camvid(batch_size=args.batch_size, data_path=args.data_path)
+if args.dataset == "camvid":
+    train_dataloader, val_dataloader = dataset_camvid(batch_size=args.batch_size, data_path=args.data_path)
+else:
+    train_dataloader, val_dataloader = dataset_Cityscapes(root = args.data_path, batch_size=args.batch_size)
 
 device = torch.device("cuda" if args.cuda else "cpu")
 
-model = SRDModel(patch_size=args.psize, image_width=576, image_height=768, num_classes=args.classes).to(device)
+# model = SRDModel(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
+model = EDANet(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
+
 print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
 # model = nn.DataParallel(model)
 

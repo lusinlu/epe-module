@@ -5,15 +5,14 @@ import os
 import os.path
 import cv2
 from torch.utils.data import Dataset
-
+import torchvision
 
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
 value_scale = 1
 mean = [0.485, 0.456, 0.406]
 mean = [item * value_scale for item in mean]
-std = [0.229, 0.224, 0.225]
-std = [item * value_scale for item in std]
+
 
 camvid_transform_train = data_transform.Compose([
     data_transform.RandScale([0.5, 2.0]),
@@ -22,13 +21,22 @@ camvid_transform_train = data_transform.Compose([
     data_transform.RandomHorizontalFlip(),
     data_transform.Resize((768, 576)),
     data_transform.ToTensor()])
-    # data_transform.Normalize(mean=mean, std=std)])
-# data_transform.Resize((768, 576)),
 
 camvid_transform_test = data_transform.Compose([
     data_transform.Resize((768, 576)),
     data_transform.ToTensor()])
-    # data_transform.Normalize(mean=mean, std=std)])
+
+cityscape_transform_train = data_transform.Compose([
+    data_transform.RandScale([0.5, 2.0]),
+    data_transform.RandRotate([-10, 10], padding=mean, ignore_label=255),
+    data_transform.RandomGaussianBlur(),
+    data_transform.RandomHorizontalFlip(),
+    data_transform.Resize((1024, 512)),
+    data_transform.ToTensor()])
+
+cityscape_transform_test = data_transform.Compose([
+    data_transform.Resize((1024, 512)),
+    data_transform.ToTensor()])
 
 
 def is_image_file(filename):
@@ -103,8 +111,20 @@ def dataset_camvid(batch_size, data_path):
     train_dataset = SemData(split='train', data_root=data_path, data_list=train_list, transform=camvid_transform_train)
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
-    val_data = SemData(split='val', data_root=data_path, data_list=val_list, transform=camvid_transform_test)
-    val_loader = data.DataLoader(val_data, batch_size=1, shuffle=False, num_workers=2)
+    val_dataset = SemData(split='val', data_root=data_path, data_list=val_list, transform=camvid_transform_test)
+    val_loader = data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2)
+
+    return train_loader, val_loader
+
+def dataset_Cityscapes(root, batch_size):
+
+    train_dataset = torchvision.datasets.Cityscapes(root, split='train', mode='fine',
+                         target_type='semantic', transforms=cityscape_transform_train)
+    train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+
+    val_dataset = torchvision.datasets.Cityscapes(root, split='val', mode='coarse',
+                         target_type='semantic', transforms=cityscape_transform_test)
+    val_loader = data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2)
 
     return train_loader, val_loader
 
