@@ -59,7 +59,8 @@ class Entropy(nn.Sequential):
 
         # create patches of size (batch x patch_size*patch_size x h*w/ (patch_size*patch_size))
         unfolded_images = self.unfold(gray_images)
-        # reshape to (batch * h*w/ (patch_size*patch_size) x (patch_size*patch_size)
+
+        # reshape to (batch x h*w/ (patch_size*patch_size) x (patch_size*patch_size)
         unfolded_images = unfolded_images.transpose(1, 2)
         unfolded_images = torch.reshape(unfolded_images.unsqueeze(2), (unfolded_images.shape[0] * self.patch_num, unfolded_images.shape[2]))
 
@@ -150,15 +151,17 @@ class Conv_Bn_Relu(nn.Sequential):
 
 
 class Upsample2x(nn.Sequential):
-    def __init__(self, in_features):
+    def __init__(self, in_features, bilinear=False):
         super(Upsample2x, self).__init__()
+        if bilinear:
+            self.up = nn.UpsamplingBilinear2d(scale_factor=2)
+        else:
+            self.conv = nn.Conv2d(in_features, in_features * 4, kernel_size=3, padding=1)
+            self.ps = nn.PixelShuffle(2)
+            self.up = nn.Sequential(self.conv, self.ps)
 
-        self.conv = nn.Conv2d(in_features, in_features * 4, kernel_size=3, padding=1)
-        self.ps = nn.PixelShuffle(2)
-
-    def forward(self, input: Tensor) -> Tensor:
-        x = self.conv(input)
-        x = self.ps(x)
+    def forward(self, input):
+        x = self.up(input)
 
         return x
 
@@ -196,35 +199,36 @@ class SRDModel(nn.Sequential):
         self.hardpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.hard_patch_num * 3, n_features=n_feat_hard, n_res_blocks=6)
         self.mediumpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.medium_patch_num * 3, n_features=n_feat_med, n_res_blocks=6)
         self.easypatch_encoder = PatchEncoderModule(in_features=self.patch_generator.easy_patch_num * 3, n_features=n_feat_easy, n_res_blocks=6)
+
         num_patches = int((n_feat_hard + n_feat_med + n_feat_easy) / 2)
         self.dec_lf1 = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1 )
         self.dec_lf2 = Conv_Bn_Relu(in_features=32, out_features=64, kernel_size=3, stride=1, padding=1 )
         self.dec_lf3 = Conv_Bn_Relu(in_features=64, out_features=3, kernel_size=3, stride=1, padding=1 )
 
-        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=24, kernel_size=3, stride=1, padding=1 )
-
-
+        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1 )
+        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.common_bn = nn.BatchNorm2d(num_features=64)
         # define encoder module
-        self.encoder = EfficientNet.from_pretrained('efficientnet-b1')
+        self.encoder = EfficientNet.from_pretrained('efficientnet-b6')
 
         # num_patches = 0
         # define decoder module
 
-        self.dec_block1 = Upsample2x(in_features=112)
-        self.dec_conv1 = Conv_Bn_Relu(in_features=112, out_features=40, kernel_size=3, stride=1, padding=1)
+        self.dec_block2 = Upsample2x(in_features=200)
+        self.dec_conv2 =  Conv_Bn_Relu(in_features=200, out_features=72, kernel_size=3, stride=1, padding=1)
 
-        self.dec_block2 = Upsample2x(in_features=40)
-        self.dec_conv2 = Conv_Bn_Relu(in_features=40, out_features=24, kernel_size=3, stride=1, padding=1)
+        self.dec_block3 = Upsample2x(in_features=72 )
+        self.dec_conv3 = Conv_Bn_Relu(in_features=72, out_features= 40, kernel_size=3, stride=1, padding=1 )
 
-        self.dec_block3 = Upsample2x(in_features=24 )
 
-        self.dec_conv3 = Conv_Bn_Relu(in_features=48, out_features= 16 * num_classes, kernel_size=3, stride=1, padding=1 )
+        self.dec_block4 = Upsample2x(in_features=40 )
+        self.dec_conv4 = Conv_Bn_Relu(in_features=40, out_features= 32, kernel_size=3, stride=1, padding=1 )
 
-        self.tail = nn.PixelShuffle(2)
+        self.final = Conv_Bn_Relu(in_features=64, out_features= num_classes, kernel_size=3, stride=1, padding=1 )
 
-        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.tail = Upsample2x(num_classes)
 
-        self.common_bn = nn.BatchNorm2d(num_features=48)
+
 
     def patch_to_image(self, image_patches,  indices, num_channels=3) -> Tensor:
         b_size = image_patches.shape[0]
@@ -255,27 +259,24 @@ class SRDModel(nn.Sequential):
         # ##################################
 
         endpoints = self.encoder.extract_endpoints(input)
-        enc3, enc2, enc1, enc0 =  endpoints['reduction_4'], endpoints['reduction_3'], endpoints['reduction_2'], endpoints['reduction_1']
+        enc4, enc3, enc2, enc1 =  endpoints['reduction_4'], endpoints['reduction_3'], endpoints['reduction_2'], endpoints['reduction_1']
 
+        dec2 = self.dec_block2(enc4)
+        dec2 = self.dec_conv2(dec2)
+        dec_add2 = torch.add(dec2, enc3)
 
-        dec1 = self.dec_block1(enc3) #128
-        dec1 = self.dec_conv1(dec1) #64
-        dec_add1 = torch.add(dec1, enc2) #128
+        dec3 = self.dec_block3(dec_add2)
+        dec3 = self.dec_conv3(dec3)
+        dec_add3 = torch.add(dec3, enc2)
 
-        dec2 = self.dec_block2(dec_add1) #64
-        dec2 = self.dec_conv2(dec2) #32
+        dec4 = self.dec_block4(dec_add3)
+        dec4 = self.dec_conv4(dec4)
+        dec_cat4 = torch.add(dec4, enc1)
 
-        dec_add2 = torch.add(dec2, enc1) #64
+        feature_fuse = self.common_bn(torch.cat((dec_cat4, self.avg_pool(local_descriptors_ext1)), dim=1))
+        output = self.final(feature_fuse)
 
-        dec3 = self.dec_block3(dec_add2) #32
-        # print(dec3.shape, local_descriptors_ext1.shape)
-        # exit()
-        feature_fuse = self.common_bn(torch.cat((dec3, self.avg_pool(local_descriptors_ext1)), dim=1))
-
-        dec3 = self.dec_conv3(feature_fuse) #16
-
-        output = self.tail(dec3)
-
+        output = self.tail(output)
 
         return output, local_descriptors, desc_output
 

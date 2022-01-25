@@ -23,6 +23,7 @@ camvid_transform_train = data_transform.Compose([
     data_transform.Resize((768, 576)),
     data_transform.ToTensor()])
     # data_transform.Normalize(mean=mean, std=std)])
+# data_transform.Resize((768, 576)),
 
 camvid_transform_test = data_transform.Compose([
     data_transform.Resize((768, 576)),

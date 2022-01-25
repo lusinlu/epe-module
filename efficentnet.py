@@ -178,7 +178,8 @@ class EfficientNet(nn.Module):
 
         # Build blocks
         self._blocks = nn.ModuleList([])
-        for block_args in self._blocks_args:
+
+        for block_args in self._blocks_args[:5]:
 
             # Update block input and output filters based on depth multiplier.
             block_args = block_args._replace(
@@ -196,18 +197,18 @@ class EfficientNet(nn.Module):
                 self._blocks.append(MBConvBlock(block_args, self._global_params, image_size=image_size))
                 # image_size = calculate_output_image_size(image_size, block_args.stride)  # stride = 1
 
-        # Head
-        in_channels = block_args.output_filters  # output of final block
-        out_channels = round_filters(1280, self._global_params)
-        Conv2d = get_same_padding_conv2d(image_size=image_size)
-        self._conv_head = Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
-        self._bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
-
-        # Final linear layer
-        self._avg_pooling = nn.AdaptiveAvgPool2d(1)
-        if self._global_params.include_top:
-            self._dropout = nn.Dropout(self._global_params.dropout_rate)
-            self._fc = nn.Linear(out_channels, self._global_params.num_classes)
+        # # Head
+        # in_channels = block_args.output_filters  # output of final block
+        # out_channels = round_filters(1280, self._global_params)
+        # Conv2d = get_same_padding_conv2d(image_size=image_size)
+        # self._conv_head = Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        # self._bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
+        #
+        # # Final linear layer
+        # self._avg_pooling = nn.AdaptiveAvgPool2d(1)
+        # if self._global_params.include_top:
+        #     self._dropout = nn.Dropout(self._global_params.dropout_rate)
+        #     self._fc = nn.Linear(out_channels, self._global_params.num_classes)
 
         # set activation to memory efficient swish by default
         self._swish = MemoryEfficientSwish()
@@ -264,8 +265,8 @@ class EfficientNet(nn.Module):
             prev_x = x
 
         # Head
-        x = self._swish(self._bn1(self._conv_head(x)))
-        endpoints['reduction_{}'.format(len(endpoints) + 1)] = x
+        # x = self._swish(self._bn1(self._conv_head(x)))
+        # endpoints['reduction_{}'.format(len(endpoints) + 1)] = x
 
         return endpoints
 
@@ -370,7 +371,7 @@ class EfficientNet(nn.Module):
         """
         model = cls.from_name(model_name, num_classes=num_classes, **override_params)
         load_pretrained_weights(model, model_name, weights_path=weights_path,
-                                load_fc=(num_classes == 1000), advprop=advprop)
+                                load_fc=False, advprop=advprop)
         model._change_in_channels(in_channels)
         return model
 

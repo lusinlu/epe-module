@@ -11,7 +11,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from dataloader import dataset_camvid
 from model_eff import SRDModel
-from utils import AverageMeter, intersectionAndUnionGPU
+from utils import AverageMeter, intersectionAndUnionGPU, iou
 import numpy as np
 
 torch.manual_seed(0)
@@ -21,13 +21,13 @@ torch.backends.cudnn.benchmark = False
 parser = argparse.ArgumentParser(description="EFSR training with the GradientVariance loss")
 parser.add_argument("--data_path", type=str,
                     help="Path to datasets")
-parser.add_argument("--epochs", default=255, type=int, metavar="N",
+parser.add_argument("--epochs", default=300, type=int, metavar="N",
                     help="Number of total epochs to run. (default:100)")
 parser.add_argument("--image-size", type=int, default=512,
                     help="Size of the data crop (squared assumed). (default:256)")
-parser.add_argument("-b", "--batch-size", default=32, type=int,
+parser.add_argument("-b", "--batch-size", default=2, type=int,
                     metavar="N", help="mini-batch size (default: 64).")
-parser.add_argument("--lr", type=float, default=1e-3,
+parser.add_argument("--lr", type=float, default=1e-4,
                     help="Learning rate. (default:0.01)")
 parser.add_argument("--weights", default="",
                     help="Path to weights (to continue training).")
@@ -55,19 +55,20 @@ if torch.cuda.is_available() and not args.cuda:
 
 train_dataloader, val_dataloader = dataset_camvid(batch_size=args.batch_size, data_path=args.data_path)
 
-device = torch.device("cuda:0" if args.cuda else "cpu")
+device = torch.device("cuda" if args.cuda else "cpu")
 
 model = SRDModel(patch_size=args.psize, image_width=576, image_height=768, num_classes=args.classes).to(device)
 print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
 # model = nn.DataParallel(model)
+
 if args.weights:
     model.load_state_dict(torch.load(args.weights, map_location=device))
 
-criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label).to(device)
-criterion_mse = nn.MSELoss().to(device)
+criterion = nn.CrossEntropyLoss(ignore_index=args.ignore_label)
+criterion_mse = nn.MSELoss()
 
-optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[ 220 ], gamma=0.1)
+optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 250 ], gamma=0.1)
 
 summary = SummaryWriter()
 pixel_scores = np.zeros(args.epochs)
@@ -87,8 +88,6 @@ for epoch in range(args.epochs):
         loss.backward()
 
         optimizer.step()
-
-
 
         progress_bar.set_description(f"[{epoch + 1}/{args.epochs}][{iteration + 1}/{len(train_dataloader)}] "
                                      f"Epoch: {epoch + 1} " f"Loss: {loss:.2f}.")
@@ -121,8 +120,10 @@ for epoch in range(args.epochs):
             loss = torch.mean(loss)
             progress_bar.set_description(f"Epoch: {epoch + 1} [{iteration + 1}/{len(val_dataloader)}] "
                                          f"Loss: {loss.item():.6f} ")
+
             output = prediction.max(1)[1]
             intersection, union, target = intersectionAndUnionGPU(output, target, args.classes, args.ignore_label)
+
             intersection, union, target = intersection.cpu().numpy(), union.cpu().numpy(), target.cpu().numpy()
             intersection_meter.update(intersection), union_meter.update(union), target_meter.update(target)
 
@@ -141,7 +142,8 @@ for epoch in range(args.epochs):
         np.save(os.path.join(chkp_dir, "accuracy"), pixel_scores)
         state = {'net': model.state_dict(), 'acc': mAcc, 'epoch': epoch, }
         torch.save(state, os.path.join(chkp_dir, str(epoch) + 'ckpt.pth'))
-        summary.add_scalar('accuracy/val',mAcc, epoch)
+        # summary.add_scalar('accuracy/val',mAcc, epoch)
+        summary.add_scalar('accuracy/mIOU',mIoU, epoch)
 
     # Dynamic adjustment of learning rate.
     scheduler.step()
