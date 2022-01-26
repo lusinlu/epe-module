@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from model_eff import Entropy, PatchEncoderModule, Conv_Bn_Relu
+from model_eff import Entropy, Conv_Bn_Relu
 
 class DownsamplerBlock(nn.Module):
     def __init__(self, ninput, noutput):
@@ -82,6 +82,25 @@ class EDABlock(nn.Module):
         # print output.size() #check the output
         return output
 
+class PatchEncoderModule(nn.Sequential):
+    def __init__(self,in_features, n_features, n_res_blocks, kernel_size=3, padding=1):
+        super(PatchEncoderModule, self).__init__()
+        # define encoder module
+        head = [Conv_Bn_Relu(in_features, n_features, kernel_size, padding=padding, stride=1, group=in_features)]
+        body = [Conv_Bn_Relu(n_features,n_features, kernel_size, padding=1, stride=1, depthwise=True) for _ in range(n_res_blocks)]
+        tail = [Conv_Bn_Relu(n_features, in_features, kernel_size, padding=1, stride=1, group=n_features)]
+
+        self.head = nn.Sequential(*head)
+        self.body = nn.Sequential(*body)
+        self.tail = nn.Sequential(*tail)
+
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        x = self.head(input)
+        x = self.body(x)
+        output = self.tail(x)
+        return output
+
 
 class EDANet(nn.Module):
     def __init__(self, image_width, image_height, patch_size, num_classes=20, cuda=True):
@@ -92,26 +111,26 @@ class EDANet(nn.Module):
         self.psize = patch_size
         self.patch_generator = Entropy(patch_size=self.psize, image_width=self.width, image_height=self.height,
                                        cuda=cuda)
-        n_feat_hard = 64
-        n_feat_med = 32
-        n_feat_easy = 16
+        n_feat_hard = 16
+        n_feat_med = 8
+        n_feat_easy = 4
 
         self.hardpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.hard_patch_num * 3,
                                                     n_features=n_feat_hard, n_res_blocks=6)
         self.mediumpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.medium_patch_num * 3,
-                                                      n_features=n_feat_med, n_res_blocks=6)
+                                                      n_features=n_feat_med, n_res_blocks=5)
         self.easypatch_encoder = PatchEncoderModule(in_features=self.patch_generator.easy_patch_num * 3,
-                                                    n_features=n_feat_easy, n_res_blocks=6)
+                                                    n_features=n_feat_easy, n_res_blocks=4)
 
         num_patches = int((n_feat_hard + n_feat_med + n_feat_easy) / 2)
         self.dec_lf1 = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
         self.dec_lf2 = Conv_Bn_Relu(in_features=32, out_features=64, kernel_size=3, stride=1, padding=1)
         self.dec_lf3 = Conv_Bn_Relu(in_features=64, out_features=3, kernel_size=3, stride=1, padding=1)
 
-        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
+        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=num_classes, kernel_size=3, stride=1, padding=1)
         self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
-        self.common_bn = nn.BatchNorm2d(num_features=64)
-        self.final = Conv_Bn_Relu(in_features=64, out_features= num_classes, kernel_size=3, stride=1, padding=1 )
+        self.common_bn = nn.BatchNorm2d(num_features=num_classes)
+        self.final = Conv_Bn_Relu(in_features=num_classes, out_features= num_classes, kernel_size=3, stride=1, padding=1 )
 
         self.layers = nn.ModuleList()
         self.dilation1 = [1, 1, 1, 2, 2]
@@ -187,7 +206,7 @@ class EDANet(nn.Module):
         # Bilinear interpolation x8
         output = F.interpolate(output, scale_factor=8, mode='bilinear', align_corners=True)
 
-        feature_fuse = self.common_bn(torch.cat((output, local_descriptors_ext1), dim=1))
+        feature_fuse = self.common_bn(torch.add(output, local_descriptors_ext1))
         output = self.final(feature_fuse)
 
         # Bilinear interpolation x2 (inference only)
