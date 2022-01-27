@@ -339,19 +339,19 @@ class DFANet(nn.Module):
         return reconstructed
 
     def forward(self, x):
-        hard_p, medium_p, easy_p, indices = self.patch_generator(x)
-
-        hard_dict = self.hardpatch_encoder(hard_p)
-        medium_dict = self.mediumpatch_encoder(medium_p)
-        easy_dict = self.easypatch_encoder(easy_p)
-        feature_ext = torch.cat((hard_dict, medium_dict, easy_dict), dim=1)
-
-        local_descriptors = self.patch_to_image(feature_ext, indices)
-        desc_output = self.dec_lf1(local_descriptors)
-        desc_output = self.dec_lf2(desc_output)
-        desc_output = self.dec_lf3(desc_output)
-
-        local_descriptors_ext1 = self.dec_lf_ext(local_descriptors)
+        # hard_p, medium_p, easy_p, indices = self.patch_generator(x)
+        #
+        # hard_dict = self.hardpatch_encoder(hard_p)
+        # medium_dict = self.mediumpatch_encoder(medium_p)
+        # easy_dict = self.easypatch_encoder(easy_p)
+        # feature_ext = torch.cat((hard_dict, medium_dict, easy_dict), dim=1)
+        #
+        # local_descriptors = self.patch_to_image(feature_ext, indices)
+        # desc_output = self.dec_lf1(local_descriptors)
+        # desc_output = self.dec_lf2(desc_output)
+        # desc_output = self.dec_lf3(desc_output)
+        #
+        # local_descriptors_ext1 = self.dec_lf_ext(local_descriptors)
 
         enc1_2, enc1_3, enc1_4, fc1, fca1 = self.backbone1(x)
         fca1_up = self.backbone1_up(fca1)
@@ -361,9 +361,9 @@ class DFANet(nn.Module):
 
         enc3_2, enc3_3, enc3_4, fc3, fca3 = self.backbone3.forward_concat(fca2_up, enc2_2, enc2_3, enc2_4)
 
-        out = self.decoder(enc1_2, enc2_2, enc3_2, fca1, fca2, fca3)
+        output = self.decoder(enc1_2, enc2_2, enc3_2, fca1, fca2, fca3)
 
-        feature_fuse = self.common_bn(torch.cat((out, local_descriptors_ext1), dim=1))
-        output = self.final(feature_fuse)
+        # feature_fuse = self.common_bn(torch.cat((out, local_descriptors_ext1), dim=1))
+        # output = self.final(feature_fuse)
 
-        return output, local_descriptors, desc_output
+        return output, output, output

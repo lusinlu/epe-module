@@ -481,32 +481,32 @@ class ENet(nn.Module):
     def __init__(self, num_classes, image_width, image_height, patch_size, encoder_relu=False, decoder_relu=True, cuda=True):
         super().__init__()
 
-        self.width = image_width
-        self.height = image_height
-        self.psize = patch_size
-        self.patch_generator = Entropy(patch_size=self.psize, image_width=self.width, image_height=self.height,
-                                       cuda=cuda)
-        n_feat_hard = 64
-        n_feat_med = 32
-        n_feat_easy = 16
-
-        self.hardpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.hard_patch_num * 3,
-                                                    n_features=n_feat_hard, n_res_blocks=6)
-        self.mediumpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.medium_patch_num * 3,
-                                                      n_features=n_feat_med, n_res_blocks=6)
-        self.easypatch_encoder = PatchEncoderModule(in_features=self.patch_generator.easy_patch_num * 3,
-                                                    n_features=n_feat_easy, n_res_blocks=6)
-
-        num_patches = int((n_feat_hard + n_feat_med + n_feat_easy) / 2)
-        self.dec_lf1 = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
-        self.dec_lf2 = Conv_Bn_Relu(in_features=32, out_features=64, kernel_size=3, stride=1, padding=1)
-        self.dec_lf3 = Conv_Bn_Relu(in_features=64, out_features=3, kernel_size=3, stride=1, padding=1)
-
-        self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
-        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
-        self.common_bn = nn.BatchNorm2d(num_features=num_classes + 32)
-        self.final = Conv_Bn_Relu(in_features=num_classes + 32, out_features=num_classes, kernel_size=3, stride=1,
-                                  padding=1)
+        # self.width = image_width
+        # self.height = image_height
+        # self.psize = patch_size
+        # self.patch_generator = Entropy(patch_size=self.psize, image_width=self.width, image_height=self.height,
+        #                                cuda=cuda)
+        # n_feat_hard = 64
+        # n_feat_med = 32
+        # n_feat_easy = 16
+        #
+        # self.hardpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.hard_patch_num * 3,
+        #                                             n_features=n_feat_hard, n_res_blocks=6)
+        # self.mediumpatch_encoder = PatchEncoderModule(in_features=self.patch_generator.medium_patch_num * 3,
+        #                                               n_features=n_feat_med, n_res_blocks=6)
+        # self.easypatch_encoder = PatchEncoderModule(in_features=self.patch_generator.easy_patch_num * 3,
+        #                                             n_features=n_feat_easy, n_res_blocks=6)
+        #
+        # num_patches = int((n_feat_hard + n_feat_med + n_feat_easy) / 2)
+        # self.dec_lf1 = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
+        # self.dec_lf2 = Conv_Bn_Relu(in_features=32, out_features=64, kernel_size=3, stride=1, padding=1)
+        # self.dec_lf3 = Conv_Bn_Relu(in_features=64, out_features=3, kernel_size=3, stride=1, padding=1)
+        #
+        # self.dec_lf_ext = Conv_Bn_Relu(in_features=3, out_features=32, kernel_size=3, stride=1, padding=1)
+        # self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
+        # self.common_bn = nn.BatchNorm2d(num_features=num_classes + 32)
+        # self.final = Conv_Bn_Relu(in_features=num_classes + 32, out_features=num_classes, kernel_size=3, stride=1,
+        #                           padding=1)
 
         self.initial_block = InitialBlock(3, 16, relu=encoder_relu)
 
@@ -610,19 +610,19 @@ class ENet(nn.Module):
             bias=False)
 
     def forward(self, x):
-        hard_p, medium_p, easy_p, indices = self.patch_generator(x)
-
-        hard_dict = self.hardpatch_encoder(hard_p)
-        medium_dict = self.mediumpatch_encoder(medium_p)
-        easy_dict = self.easypatch_encoder(easy_p)
-        feature_ext = torch.cat((hard_dict, medium_dict, easy_dict), dim=1)
-
-        local_descriptors = self.patch_to_image(feature_ext, indices)
-        desc_output = self.dec_lf1(local_descriptors)
-        desc_output = self.dec_lf2(desc_output)
-        desc_output = self.dec_lf3(desc_output)
-
-        local_descriptors_ext1 = self.dec_lf_ext(local_descriptors)
+        # hard_p, medium_p, easy_p, indices = self.patch_generator(x)
+        #
+        # hard_dict = self.hardpatch_encoder(hard_p)
+        # medium_dict = self.mediumpatch_encoder(medium_p)
+        # easy_dict = self.easypatch_encoder(easy_p)
+        # feature_ext = torch.cat((hard_dict, medium_dict, easy_dict), dim=1)
+        #
+        # local_descriptors = self.patch_to_image(feature_ext, indices)
+        # desc_output = self.dec_lf1(local_descriptors)
+        # desc_output = self.dec_lf2(desc_output)
+        # desc_output = self.dec_lf3(desc_output)
+        #
+        # local_descriptors_ext1 = self.dec_lf_ext(local_descriptors)
 
         # Initial block
         input_size = x.size()
@@ -666,9 +666,9 @@ class ENet(nn.Module):
         # Stage 5 - Decoder
         x = self.upsample5_0(x, max_indices1_0, output_size=stage1_input_size)
         x = self.regular5_1(x)
-        x = self.transposed_conv(x, output_size=input_size)
+        output = self.transposed_conv(x, output_size=input_size)
 
-        feature_fuse = self.common_bn(torch.cat((x, local_descriptors_ext1), dim=1))
-        output = self.final(feature_fuse)
+        # feature_fuse = self.common_bn(torch.cat((x, local_descriptors_ext1), dim=1))
+        # output = self.final(feature_fuse)
 
-        return output, local_descriptors, desc_output
+        return output, output, output

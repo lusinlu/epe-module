@@ -14,6 +14,7 @@ from model_eff import SRDModel
 from edanet import EDANet
 from utils import AverageMeter, intersectionAndUnionGPU, iou
 import numpy as np
+from enet import ENet
 
 torch.manual_seed(0)
 torch.backends.cudnn.deterministic = True
@@ -66,6 +67,7 @@ device = torch.device("cuda" if args.cuda else "cpu")
 
 # model = SRDModel(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
 model = EDANet(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
+# model = ENet(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
 
 print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
 # model = nn.DataParallel(model)
@@ -78,7 +80,10 @@ criterion = nn.CrossEntropyLoss(ignore_index=255)
 criterion_mse = nn.MSELoss()
 
 optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 250 ], gamma=0.1)
+lr_fc = lambda iteration: (1 - iteration / 20000) ** 0.9
+scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_fc, -1)
+
+# scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 250 ], gamma=0.1)
 
 summary = SummaryWriter()
 pixel_scores = np.zeros(args.epochs)
