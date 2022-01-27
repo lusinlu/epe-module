@@ -7,36 +7,18 @@ import cv2
 from torch.utils.data import Dataset
 import torchvision
 from cityscapes import Cityscapes
+import joint_transforms
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
 value_scale = 1
 mean = [0.485, 0.456, 0.406]
 mean = [item * value_scale for item in mean]
 
+mask_colors_cityscape =[(128, 64, 128),(244, 35, 232),(70, 70, 70),(102, 102, 156),(190, 153, 153),(153, 153, 153),
+                       (250, 170, 30),(220, 220, 0),(107, 142, 35),(152, 251, 152),(70, 130, 180),(220, 20, 60),
+                       (255, 0, 0),(0, 0, 142),(0, 0, 70),(0, 60, 100),(0, 80, 100),(0, 0, 230),(119, 11, 32), (0, 0, 0)]
 
-camvid_transform_train = data_transform.Compose([
-    data_transform.RandScale([0.5, 2.0]),
-    data_transform.RandRotate([-10, 10], padding=mean, ignore_label=255),
-    data_transform.RandomGaussianBlur(),
-    data_transform.RandomHorizontalFlip(),
-    data_transform.Resize((768, 576)),
-    data_transform.ToTensor()])
 
-camvid_transform_test = data_transform.Compose([
-    data_transform.Resize((768, 576)),
-    data_transform.ToTensor()])
-
-cityscape_transform_train = data_transform.Compose([
-    data_transform.RandScale([0.5, 2.0]),
-    data_transform.RandRotate([-10, 10], padding=mean, ignore_label=255),
-    data_transform.RandomGaussianBlur(),
-    data_transform.RandomHorizontalFlip(),
-    data_transform.Resize((512, 1024)),
-    data_transform.ToTensor()])
-
-cityscape_transform_test = data_transform.Compose([
-    data_transform.Resize((512, 1024)),
-    data_transform.ToTensor()])
 
 
 def is_image_file(filename):
@@ -104,7 +86,19 @@ class SemData(Dataset):
 
 
 
-def dataset_camvid(batch_size, data_path):
+def dataset_camvid(batch_size, data_path, image_height, image_width):
+    camvid_transform_train = data_transform.Compose([
+        data_transform.RandScale([0.5, 2.0]),
+        data_transform.RandRotate([-10, 10], padding=mean, ignore_label=255),
+        data_transform.RandomGaussianBlur(),
+        data_transform.RandomHorizontalFlip(),
+        data_transform.Resize((image_height, image_width)),
+        data_transform.ToTensor()])
+
+    camvid_transform_test = data_transform.Compose([
+        data_transform.Resize((image_height, image_width)),
+        data_transform.ToTensor()])
+
     train_list = os.path.join(data_path,"CamVid",  "train.txt")
     val_list = os.path.join(data_path, "CamVid", "val.txt")
 
@@ -116,16 +110,37 @@ def dataset_camvid(batch_size, data_path):
 
     return train_loader, val_loader
 
-def dataset_Cityscapes(root, batch_size):
 
-    train_dataset = Cityscapes(root, split='train', mode='fine',
-                         target_type='semantic', transforms=cityscape_transform_train)
-    train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+def dataset_Cityscapes(root, batch_size, image_height, image_width):
+    train_dataset = Cityscapes(root, split='train', mode='fine', target_type='semantic',
+                               transform=joint_transforms.Compose([
+                                   joint_transforms.RandomHorizontalFlip(),
+                                   joint_transforms.RandomSized((image_height, image_width)),
+                                   joint_transforms.ToTensor(),
+                                   joint_transforms.Normalize(
+                                       mean=[0.485, 0.456, 0.406],
+                                       std=[0.229, 0.224, 0.225])
+                               ]))
 
-    val_dataset = Cityscapes(root, split='val', mode='fine',
-                         target_type='semantic', transforms=cityscape_transform_test)
-    val_loader = data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2)
+
+
+    train_loader = data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True,
+        num_workers=12, pin_memory=True, sampler=None)
+
+    val_loader = data.DataLoader(
+        Cityscapes(root, split='val', mode='fine', target_type='semantic',
+                   transform=joint_transforms.Compose([
+                       joint_transforms.Resize((image_height, image_width)),
+                       joint_transforms.ToTensor(),
+                       joint_transforms.Normalize(
+                           mean=[0.485, 0.456, 0.406],
+                           std=[0.229, 0.224, 0.225])
+                   ])),
+        batch_size=batch_size, shuffle=True,
+        num_workers=10, pin_memory=True)
 
     return train_loader, val_loader
+
 
 

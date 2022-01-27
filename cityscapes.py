@@ -1,37 +1,32 @@
 import json
 import os
 from collections import namedtuple
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
 
-from torchvision.datasets.utils import extract_archive, verify_str_arg, iterable_to_str
-from torchvision.datasets.vision import VisionDataset
-from PIL import Image
 import numpy as np
+import torch.utils.data as data
+from PIL import Image
 
-class Cityscapes(VisionDataset):
+class Cityscapes(data.Dataset):
     """`Cityscapes <http://www.cityscapes-dataset.com/>`_ Dataset.
 
     Args:
         root (string): Root directory of dataset where directory ``leftImg8bit``
             and ``gtFine`` or ``gtCoarse`` are located.
-        split (string, optional): The image split to use, ``train``, ``test`` or ``val`` if mode="fine"
+        split (string, optional): The image split to use, ``train``, ``test`` or ``val`` if mode="gtFine"
             otherwise ``train``, ``train_extra`` or ``val``
-        mode (string, optional): The quality mode to use, ``fine`` or ``coarse``
+        mode (string, optional): The quality mode to use, ``gtFine`` or ``gtCoarse``
         target_type (string or list, optional): Type of target to use, ``instance``, ``semantic``, ``polygon``
             or ``color``. Can also be a list to output a tuple with all specified target types.
         transform (callable, optional): A function/transform that takes in a PIL image
             and returns a transformed version. E.g, ``transforms.RandomCrop``
         target_transform (callable, optional): A function/transform that takes in the
             target and transforms it.
-        transforms (callable, optional): A function/transform that takes input sample and its target as entry
-            and returns a transformed version.
 
     Examples:
 
         Get semantic segmentation target
 
         .. code-block:: python
-
             dataset = Cityscapes('./data/cityscapes', split='train', mode='fine',
                                  target_type='semantic')
 
@@ -40,7 +35,6 @@ class Cityscapes(VisionDataset):
         Get multiple targets
 
         .. code-block:: python
-
             dataset = Cityscapes('./data/cityscapes', split='train', mode='fine',
                                  target_type=['instance', 'color', 'polygon'])
 
@@ -49,7 +43,6 @@ class Cityscapes(VisionDataset):
         Validate on the "coarse" set
 
         .. code-block:: python
-
             dataset = Cityscapes('./data/cityscapes', split='val', mode='coarse',
                                  target_type='semantic')
 
@@ -98,98 +91,39 @@ class Cityscapes(VisionDataset):
         CityscapesClass('license plate', -1, -1, 'vehicle', 7, False, True, (0, 0, 142)),
     ]
 
-
-    def __init__(
-            self,
-            root: str,
-            split: str = "train",
-            mode: str = "fine",
-            target_type: Union[List[str], str] = "instance",
-            transform: Optional[Callable] = None,
-            target_transform: Optional[Callable] = None,
-            transforms: Optional[Callable] = None,
-    ) -> None:
-        super(Cityscapes, self).__init__(root, transforms, transform, target_transform)
+    def __init__(self, root, split='train', mode='fine', target_type='instance',
+                 transform=None, target_transform=None):
+        self.root = os.path.expanduser(root)
         self.mode = 'gtFine' if mode == 'fine' else 'gtCoarse'
         self.images_dir = os.path.join(self.root, 'leftImg8bit', split)
         self.targets_dir = os.path.join(self.root, self.mode, split)
+        self.transform = transform
+        self.target_transform = target_transform
         self.target_type = target_type
         self.split = split
         self.images = []
         self.targets = []
-        # Mapping of ignore categories and valid ones (numbered from 1-19)
-        self.mapping_20 = {
-            0: 0,
-            1: 0,
-            2: 0,
-            3: 0,
-            4: 0,
-            5: 0,
-            6: 0,
-            7: 1,
-            8: 2,
-            9: 0,
-            10: 0,
-            11: 3,
-            12: 4,
-            13: 5,
-            14: 0,
-            15: 0,
-            16: 0,
-            17: 6,
-            18: 0,
-            19: 7,
-            20: 8,
-            21: 9,
-            22: 10,
-            23: 11,
-            24: 12,
-            25: 13,
-            26: 14,
-            27: 15,
-            28: 16,
-            29: 0,
-            30: 0,
-            31: 17,
-            32: 18,
-            33: 19,
-            -1: 0
-        }
 
-        verify_str_arg(mode, "mode", ("fine", "coarse"))
-        if mode == "fine":
-            valid_modes = ("train", "test", "val")
-        else:
-            valid_modes = ("train", "train_extra", "val")
-        msg = ("Unknown value '{}' for argument split if mode is '{}'. "
-               "Valid values are {{{}}}.")
-        msg = msg.format(split, mode, iterable_to_str(valid_modes))
-        verify_str_arg(split, "split", valid_modes, msg)
+        if mode not in ['fine', 'coarse']:
+            raise ValueError('Invalid mode! Please use mode="fine" or mode="coarse"')
+
+        if mode == 'fine' and split not in ['train', 'test', 'val']:
+            raise ValueError('Invalid split for mode "fine"! Please use split="train", split="test"'
+                             ' or split="val"')
+        elif mode == 'coarse' and split not in ['train', 'train_extra', 'val']:
+            raise ValueError('Invalid split for mode "coarse"! Please use split="train", split="train_extra"'
+                             ' or split="val"')
 
         if not isinstance(target_type, list):
             self.target_type = [target_type]
-        [verify_str_arg(value, "target_type",
-                        ("instance", "semantic", "polygon", "color"))
-         for value in self.target_type]
+
+        if not all(t in ['instance', 'semantic', 'polygon', 'color'] for t in self.target_type):
+            raise ValueError('Invalid value for "target_type"! Valid values are: "instance", "semantic", "polygon"'
+                             ' or "color"')
 
         if not os.path.isdir(self.images_dir) or not os.path.isdir(self.targets_dir):
-
-            if split == 'train_extra':
-                image_dir_zip = os.path.join(self.root, 'leftImg8bit{}'.format('_trainextra.zip'))
-            else:
-                image_dir_zip = os.path.join(self.root, 'leftImg8bit{}'.format('_trainvaltest.zip'))
-
-            if self.mode == 'gtFine':
-                target_dir_zip = os.path.join(self.root, '{}{}'.format(self.mode, '_trainvaltest.zip'))
-            elif self.mode == 'gtCoarse':
-                target_dir_zip = os.path.join(self.root, '{}{}'.format(self.mode, '.zip'))
-
-            if os.path.isfile(image_dir_zip) and os.path.isfile(target_dir_zip):
-                extract_archive(from_path=image_dir_zip, to_path=self.root)
-                extract_archive(from_path=target_dir_zip, to_path=self.root)
-            else:
-                raise RuntimeError('Dataset not found or incomplete. Please make sure all required folders for the'
-                                   ' specified "split" and "mode" are inside the "root" directory')
+            raise RuntimeError('Dataset not found or incomplete. Please make sure all required folders for the'
+                               ' specified "split" and "mode" are inside the "root" directory')
 
         for city in os.listdir(self.images_dir):
             img_dir = os.path.join(self.images_dir, city)
@@ -204,7 +138,7 @@ class Cityscapes(VisionDataset):
                 self.images.append(os.path.join(img_dir, file_name))
                 self.targets.append(target_types)
 
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+    def __getitem__(self, index):
         """
         Args:
             index (int): Index
@@ -215,7 +149,7 @@ class Cityscapes(VisionDataset):
 
         image = Image.open(self.images[index]).convert('RGB')
 
-        targets: Any = []
+        targets = []
         for i, t in enumerate(self.target_type):
             if t == 'polygon':
                 target = self._load_json(self.targets[index][i])
@@ -225,30 +159,36 @@ class Cityscapes(VisionDataset):
             targets.append(target)
 
         target = tuple(targets) if len(targets) > 1 else targets[0]
-        target = np.array(target)
-        label_mask = np.zeros_like(target)
-        for k in self.mapping_20:
-            label_mask[target == k] = self.mapping_20[k]
-        image = np.array(image)
-        target = label_mask
-        if self.transforms is not None:
-            image, target = self.transforms(image, target)
+        if self.transform:
+            image, target = self.transform(image, target)
 
-        return image, target
+        if self.target_transform:
+            target = self.target_transform(target)
 
-    def __len__(self) -> int:
+        return image, target.squeeze()
+
+    def __len__(self):
         return len(self.images)
 
-    def extra_repr(self) -> str:
-        lines = ["Split: {split}", "Mode: {mode}", "Type: {target_type}"]
-        return '\n'.join(lines).format(**self.__dict__)
+    def __repr__(self):
+        fmt_str = 'Dataset ' + self.__class__.__name__ + '\n'
+        fmt_str += '    Number of datapoints: {}\n'.format(self.__len__())
+        fmt_str += '    Split: {}\n'.format(self.split)
+        fmt_str += '    Mode: {}\n'.format(self.mode)
+        fmt_str += '    Type: {}\n'.format(self.target_type)
+        fmt_str += '    Root Location: {}\n'.format(self.root)
+        tmp = '    Transforms (if any): '
+        fmt_str += '{0}{1}\n'.format(tmp, self.transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
+        tmp = '    Target Transforms (if any): '
+        fmt_str += '{0}{1}'.format(tmp, self.target_transform.__repr__().replace('\n', '\n' + ' ' * len(tmp)))
+        return fmt_str
 
-    def _load_json(self, path: str) -> Dict[str, Any]:
+    def _load_json(self, path):
         with open(path, 'r') as file:
             data = json.load(file)
         return data
 
-    def _get_target_suffix(self, mode: str, target_type: str) -> str:
+    def _get_target_suffix(self, mode, target_type):
         if target_type == 'instance':
             return '{}_instanceIds.png'.format(mode)
         elif target_type == 'semantic':
