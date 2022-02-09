@@ -11,10 +11,8 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from dataloader import dataset_camvid, dataset_Cityscapes, mask_colors_cityscape
 from model_eff import SRDModel
-from edanet import EDANet
 from utils import AverageMeter, intersectionAndUnionGPU, iou
 import numpy as np
-from enet import ENet
 
 torch.manual_seed(0)
 torch.backends.cudnn.deterministic = True
@@ -66,8 +64,6 @@ else:
 device = torch.device("cuda" if args.cuda else "cpu")
 
 model = SRDModel(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
-# model = EDANet(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
-# model = ENet(patch_size=args.psize, image_width=args.img_width, image_height=args.img_height, num_classes=args.classes).to(device)
 
 print(f"num of parameters - {sum([m.numel() for m in model.parameters()])}")
 model = nn.DataParallel(model)
@@ -98,9 +94,8 @@ for epoch in range(args.epochs):
         output, feature, rgb = model(inputs)
 
         loss_ce =  criterion(output, target)
-        # loss_mse = criterion_mse(rgb, inputs)
-        loss =  loss_ce
-                # + 0.5*loss_mse
+        loss_mse = criterion_mse(rgb, inputs)
+        loss =  loss_ce + 0.5 * loss_mse
         loss.backward()
 
         optimizer.step()
@@ -111,28 +106,28 @@ for epoch in range(args.epochs):
 
     summary.add_scalar('Loss/train', loss.detach().cpu().numpy(), epoch)
 
-    # maskr = torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1)
-    # maskg = torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1)
-    # maskb = torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1)
-    # targetr, targetg, targetb = target.clone(), target.clone(), target.clone()
-    # rgb_input = inputs.clone()
-    # rgb_input = (rgb_input.mul_(s.to(inputs.device)).add_(m.to(inputs.device)))
-    # for idx in range(len(mask_colors_cityscape)):
-    #     maskr[maskr == idx] = mask_colors_cityscape[idx][0]
-    #     maskg[maskg == idx] = mask_colors_cityscape[idx][1]
-    #     maskb[maskb == idx] = mask_colors_cityscape[idx][2]
-    #
-    #     targetr[targetr == idx] = mask_colors_cityscape[idx][0]
-    #     targetg[targetg == idx] = mask_colors_cityscape[idx][1]
-    #     targetb[targetb == idx] = mask_colors_cityscape[idx][2]
-    # mask = torch.cat((maskr.unsqueeze(1), torch.cat((maskg.unsqueeze(1), maskb.unsqueeze(1)), dim=1)), dim=1)
-    # target_rgb = torch.cat((targetr.unsqueeze(1), torch.cat((targetg.unsqueeze(1), targetb.unsqueeze(1)), dim=1)), dim=1)
+    maskr = torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1)
+    maskg = torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1)
+    maskb = torch.argmax(torch.nn.functional.softmax(output, dim=1), dim=1)
+    targetr, targetg, targetb = target.clone(), target.clone(), target.clone()
+    rgb_input = inputs.clone()
+    rgb_input = (rgb_input.mul_(s.to(inputs.device)).add_(m.to(inputs.device)))
+    for idx in range(len(mask_colors_cityscape)):
+        maskr[maskr == idx] = mask_colors_cityscape[idx][0]
+        maskg[maskg == idx] = mask_colors_cityscape[idx][1]
+        maskb[maskb == idx] = mask_colors_cityscape[idx][2]
 
-    # summary.add_images('output',mask[:1]  , epoch)
-    # summary.add_images('target', target_rgb[:1] , epoch)
-    # summary.add_images('input', rgb_input[:1] , epoch)
-    # summary.add_images('feature',(feature)[:1] , epoch)
-    # summary.add_images('rgb',(rgb)[:1] , epoch)
+        targetr[targetr == idx] = mask_colors_cityscape[idx][0]
+        targetg[targetg == idx] = mask_colors_cityscape[idx][1]
+        targetb[targetb == idx] = mask_colors_cityscape[idx][2]
+    mask = torch.cat((maskr.unsqueeze(1), torch.cat((maskg.unsqueeze(1), maskb.unsqueeze(1)), dim=1)), dim=1)
+    target_rgb = torch.cat((targetr.unsqueeze(1), torch.cat((targetg.unsqueeze(1), targetb.unsqueeze(1)), dim=1)), dim=1)
+
+    summary.add_images('output',mask[:1]  , epoch)
+    summary.add_images('target', target_rgb[:1] , epoch)
+    summary.add_images('input', rgb_input[:1] , epoch)
+    summary.add_images('feature',(feature)[:1] , epoch)
+    summary.add_images('rgb',(rgb)[:1] , epoch)
 
 
     # Test
