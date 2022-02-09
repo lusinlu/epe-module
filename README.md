@@ -22,7 +22,7 @@ If you find the code useful for your research, please consider citing our works
 @article{abrahamyanepe,
   title={Entropy-Based Feature Extraction For Real-Time Semantic Segmentation},
   author={Lusine, Abrahamyan and Nikos, Deligiannis},
-  journal={Proceedings of the IEEE/CVF International Conference on Image Processing (ICIP)},
+  journal={Proceedings of the IEEE International Conference on Image Processing (ICIP)},
   publisher = {IEEE},
   year={2022}
 }
