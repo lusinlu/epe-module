@@ -11,8 +11,10 @@ import joint_transforms
 IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
 value_scale = 1
+
+
 mean = [0.485, 0.456, 0.406]
-mean = [item * value_scale for item in mean]
+std = [0.229, 0.224, 0.225]
 
 mask_colors_cityscape =[(128, 64, 128),(244, 35, 232),(70, 70, 70),(102, 102, 156),(190, 153, 153),(153, 153, 153),
                        (250, 170, 30),(220, 220, 0),(107, 142, 35),(152, 251, 152),(70, 130, 180),(220, 20, 60),
@@ -118,11 +120,9 @@ def dataset_Cityscapes(root, batch_size, image_height, image_width):
                                    joint_transforms.RandomSized((image_height, image_width)),
                                    joint_transforms.ToTensor(),
                                    joint_transforms.Normalize(
-                                       mean=[0.485, 0.456, 0.406],
-                                       std=[0.229, 0.224, 0.225])
+                                       mean=mean,
+                                       std=std)
                                ]))
-
-
 
     train_loader = data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True,
@@ -134,11 +134,11 @@ def dataset_Cityscapes(root, batch_size, image_height, image_width):
                        joint_transforms.Resize((image_height, image_width)),
                        joint_transforms.ToTensor(),
                        joint_transforms.Normalize(
-                           mean=[0.485, 0.456, 0.406],
-                           std=[0.229, 0.224, 0.225])
+                           mean=mean,
+                           std=std)
                    ])),
         batch_size=batch_size, shuffle=True,
-        num_workers=10, pin_memory=True)
+        num_workers=10, pin_memory=False)
 
     return train_loader, val_loader
 

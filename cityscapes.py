@@ -1,8 +1,6 @@
 import json
 import os
 from collections import namedtuple
-
-import numpy as np
 import torch.utils.data as data
 from PIL import Image
 
