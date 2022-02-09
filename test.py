@@ -11,8 +11,7 @@ torch.manual_seed(0)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# camvid img_width", type=int, default=576, img_height", type=int, default=768
-parser = argparse.ArgumentParser(description="EFSR test")
+parser = argparse.ArgumentParser(description="RTEffNet validation on Cityscapes dataset")
 parser.add_argument("--data_path", type=str,help="Path to datasets")
 parser.add_argument("--img_width", type=int, default=1024, help="Width of the image (576 for CamVid)")
 parser.add_argument("--img_height", type=int, default=512, help="Height of the image (768 for CamVid)")
