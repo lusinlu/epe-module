@@ -1,5 +1,5 @@
 # EPE Module
-[ICIP 2022] Official implementation of the [paper](https://openaccess.thecvf.com/content/ICCV2021/papers/Abrahamyan_Bias_Loss_for_Mobile_Neural_Networks_ICCV_2021_paper.pdf) "Entropy-Based Feature Extraction For Real-Time Semantic Segmentation".
+[ICIP 2022] Official implementation of the [paper](https://arxiv.org/abs/2207.03233) "Entropy-Based Feature Extraction For Real-Time Semantic Segmentation".
 
 ## Usage (test)
 Pretrained RTEffNet+EPE model is available from [Google Drive](https://drive.google.com/file/d/12H8WmfGOX4cZ9jeFPAo6aHU7LzD7HtBE/view?usp=sharing). For the testing of the model using the Cityscapes validation set run the following command:
